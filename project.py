@@ -3,7 +3,7 @@
 
 # # Multi-classification of chest X-ray images with a convolutional neural network
 
-# In[ ]:
+# In[23]:
 
 
 import copy
@@ -14,6 +14,7 @@ from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
 import torch
@@ -194,7 +195,7 @@ while class_id < len(classes):
                 class_id += 1
 
 
-# In[18]:
+# In[20]:
 
 
 def train_model(
@@ -300,8 +301,8 @@ def test_model(model, criterion, test_loader):
     return (
         accuracy, 
         test_loss, 
-        true_labels.numpy(), 
-        predicted_labels.numpy(),
+        true_labels, 
+        predicted_labels,
     )
 
 
@@ -384,7 +385,7 @@ plot_loss(
 )
 
 
-# In[19]:
+# In[21]:
 
 
 _, _, y_true, y_predicted = test_model(
@@ -394,6 +395,20 @@ _, _, y_true, y_predicted = test_model(
 )
 confusion_matrix_ = confusion_matrix(y_true, y_predicted)
 print(confusion_matrix_)
+
+
+# In[25]:
+
+
+confusion_matrix_dataframe = pd.DataFrame(
+    confusion_matrix_, 
+    index=classes,
+    columns=[i for i in classes])
+
+heatmap = sns.heatmap(confusion_matrix_dataframe, annot=True)
+plt.ylabel('True label', fontsize=14, fontweight='bold')
+plt.xlabel('Predicted label', fontsize=14, fontweight='bold')
+plt.show()
 
 
 # In[ ]:
