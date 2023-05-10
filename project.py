@@ -3,7 +3,7 @@
 
 # # Multi-classification of chest X-ray images with a convolutional neural network
 
-# In[14]:
+# In[ ]:
 
 
 import copy
@@ -28,7 +28,7 @@ from tqdm import tqdm
 get_ipython().run_line_magic('matplotlib', 'inline')
 
 
-# In[15]:
+# In[ ]:
 
 
 print(f'Python version: {sys.version_info.major}.{sys.version_info.minor}')
@@ -50,10 +50,10 @@ device = get_device()
 print(f'Using device: {device}')
 
 
-# In[16]:
+# In[3]:
 
 
-def find_smallest_image(dataset_root: str) -> Tuple[int, str, str]:
+def find_smallest_image(dataset_root: str) -> Tuple[int, str, Tuple[int, int]]:
     smallest_size = (float('inf'), float('inf'))
     smallest_file = ''
     
@@ -92,7 +92,7 @@ print(
 
 # ## Data loading and preprocessing
 
-# In[17]:
+# In[4]:
 
 
 IMAGE_SIZE = 400
@@ -103,7 +103,7 @@ VALIDATION_PERCENTAGE = 0.3
 BATCH_SIZE = 10
 
 
-# In[18]:
+# In[5]:
 
 
 full_train_dataset = datasets.ImageFolder(root=TRAINING_FOLDER)
@@ -118,13 +118,13 @@ test_dataset = datasets.ImageFolder(root=TEST_FOLDER)
 # For information about augmentation see:
 # https://pytorch.org/vision/stable/transforms.html
 
-# In[19]:
+# In[6]:
 
 
 ROTATION_DEGREE = 20
 
 
-# In[20]:
+# In[7]:
 
 
 resize = transforms.Resize(size=(IMAGE_SIZE, IMAGE_SIZE))
@@ -146,7 +146,7 @@ validation_dataset.dataset.transform = validation_transforms
 test_dataset = datasets.ImageFolder(root=TEST_FOLDER, transform=test_transforms)
 
 
-# In[21]:
+# In[8]:
 
 
 training_loader = DataLoader(
@@ -178,7 +178,7 @@ print(
 )
 
 
-# In[22]:
+# In[9]:
 
 
 class_id = 0
@@ -194,7 +194,7 @@ while class_id < len(classes):
                 class_id += 1
 
 
-# In[34]:
+# In[18]:
 
 
 def train_model(
@@ -271,6 +271,8 @@ def test_model(model, criterion, test_loader):
     test_loss = 0
     true_labels = []
     predicted_labels = []
+    
+    model = model.to(device)
 
     model.eval()
     with torch.no_grad():
@@ -280,11 +282,11 @@ def test_model(model, criterion, test_loader):
             prediction = model(images)
             test_loss += criterion(prediction, labels).item() * len(labels)
 
-            predicted_label = torch.argmax(prediction, dim=1)
-            num_correct += (predicted_label == labels).sum().item()
+            predicted_batch_labels = torch.argmax(prediction, dim=1)
+            num_correct += (predicted_batch_labels == labels).sum().item()
             num_total += labels.size(0)
-            true_labels.append(labels)
-            predicted_labels.append(predicted_label)
+            true_labels.extend(labels.tolist())
+            predicted_labels.extend(predicted_batch_labels.tolist())
 
     accuracy = num_correct / num_total
     test_loss /= num_total
@@ -298,12 +300,12 @@ def test_model(model, criterion, test_loader):
     return (
         accuracy, 
         test_loss, 
-        true_labels[0].cpu().numpy(), 
-        predicted_labels[0].cpu().numpy(),
+        true_labels.numpy(), 
+        predicted_labels.numpy(),
     )
 
 
-# In[24]:
+# In[11]:
 
 
 def plot_loss(list1, list2, label1, label2):
@@ -317,33 +319,30 @@ def plot_loss(list1, list2, label1, label2):
     plt.show()
 
 
-# In[25]:
+# In[12]:
 
 
-NUM_EPOCHS = 50
+NUM_EPOCHS = 15
 LEARNING_RATE = 3e-5
 WEIGHT_DECAY = 1e-2
 
 
-# In[26]:
+# In[13]:
 
 
-# Fine-tune a model to the dataset
-# model_ft = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 fine_tuned_model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-# model_summary = summary(model_ft, input_size=(BATCH_SIZE, 3, IMAGE_SIZE, IMAGE_SIZE))
-
-
 # replace the last layer with one with 3 output features
 fine_tuned_model.fc = nn.Linear(fine_tuned_model.fc.in_features, 3)
 
-# Do the things required for fine-tuning before training the model
 criterion_ft = nn.CrossEntropyLoss()
 optimizer_ft = torch.optim.Adam(
     fine_tuned_model.parameters(), 
     lr=LEARNING_RATE, 
     weight_decay=WEIGHT_DECAY,
 )
+
+
+# In[14]:
 
 
 training_ft_losses, validation_ft_losses, best_ft_model_state = train_model(
@@ -358,16 +357,25 @@ torch.save(best_ft_model_state, 'best_model.pth')
 fine_tuned_model.load_state_dict(best_ft_model_state)
 
 
-# In[35]:
+# In[15]:
 
 
-_, _, y_true, y_predicted = test_model(
-    fine_tuned_model, 
-    criterion_ft, 
-    test_loader,
-)
+import torch
+from torch import nn
+from torchvision import models
 
-# info
+best_ft_model_state = torch.load('best_model.pth')
+fine_tuned_model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+# replace the last layer with one with 3 output features
+fine_tuned_model.fc = nn.Linear(fine_tuned_model.fc.in_features, 3)
+fine_tuned_model.load_state_dict(best_ft_model_state)
+
+criterion_ft = nn.CrossEntropyLoss()
+
+
+# In[16]:
+
+
 plot_loss(
     validation_ft_losses, 
     training_ft_losses,
@@ -375,6 +383,15 @@ plot_loss(
     'training',
 )
 
+
+# In[19]:
+
+
+_, _, y_true, y_predicted = test_model(
+    fine_tuned_model, 
+    criterion_ft, 
+    test_loader,
+)
 confusion_matrix_ = confusion_matrix(y_true, y_predicted)
 print(confusion_matrix_)
 
