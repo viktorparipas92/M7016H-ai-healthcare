@@ -125,6 +125,12 @@ test_dataset = datasets.ImageFolder(root=TEST_FOLDER)
 ROTATION_DEGREE = 20
 
 
+# In[ ]:
+
+
+random.s
+
+
 # In[7]:
 
 
