@@ -338,60 +338,78 @@ WEIGHT_DECAY = 1e-2
 
 # ### Model selection and training
 
-# In[13]:
+# In[21]:
 
 
-fine_tuned_model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-# replace the last layer with one with 3 output features
-fine_tuned_model.fc = nn.Linear(fine_tuned_model.fc.in_features, 3)
+resnet18_model = models.resnet18(weights='DEFAULT')
+resnet50_model = models.resnet50(weights='DEFAULT')
 
-criterion_ft = nn.CrossEntropyLoss()
-optimizer_ft = torch.optim.Adam(
-    fine_tuned_model.parameters(), 
-    lr=LEARNING_RATE, 
-    weight_decay=WEIGHT_DECAY,
-)
+models_to_fine_tune = {
+    'ResNet-18': resnet18_model,
+    'ResNet-50': resnet50_model,
+}
 
 
-# In[14]:
+# In[24]:
 
 
-training_ft_losses, validation_ft_losses, best_ft_model_state = train_model(
-    fine_tuned_model, 
-    criterion_ft, 
-    optimizer_ft, 
-    training_loader, 
-    validation_loader, 
-    NUM_EPOCHS,
-)
-torch.save(best_ft_model_state, 'best_model.pth')
-fine_tuned_model.load_state_dict(best_ft_model_state)
+num_classes = len(classes)
+
+for model_name, model in models_to_fine_tune.items():
+    model.fc = nn.Linear(
+        model.fc.in_features, num_classes
+    )
+    optimizer_for_fine_tuning = torch.optim.Adam(
+        model.parameters(), 
+        lr=LEARNING_RATE, 
+        weight_decay=WEIGHT_DECAY,
+    )
+    print(f'Training {model_name}: \n')
+    
+    (
+        fine_tuned_training_losses, 
+        fine_tuned_validation_losses, 
+        best_fine_tuned_model_state,
+    ) = train_model(
+        model, 
+        nn.CrossEntropyLoss(), 
+        optimizer_for_fine_tuning, 
+        training_loader, 
+        validation_loader, 
+        NUM_EPOCHS,
+    )
+    torch.save(best_fine_tuned_model_state, f'best-model-{model_name}.pth')
 
 
 # ### Visualization and evaluation
 
 # #### Loading best model
 
-# In[15]:
+# In[26]:
 
 
 import torch
-from torch import nn
-from torchvision import models
 
-best_ft_model_state = torch.load('best_model.pth')
-fine_tuned_model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+
 # replace the last layer with one with 3 output features
 fine_tuned_model.fc = nn.Linear(fine_tuned_model.fc.in_features, 3)
-fine_tuned_model.load_state_dict(best_ft_model_state)
 
 criterion_ft = nn.CrossEntropyLoss()
+
+best_models = {}
+for model_name, model in models_to_fine_tune.items():
+    best_model_filename = f'best-model-{model_name}.pth'
+    best_model_state = torch.load(best_model_filename)
+    model.load_state_dict(best_model_state)
+    best_models[model_name] = model
 
 
 # #### Plotting losses
 
 # In[16]:
 
+
+# Do not run this cell
 
 plot_loss(
     validation_ft_losses, 
@@ -403,31 +421,29 @@ plot_loss(
 
 # #### Evaluating the performance of the model
 
-# In[17]:
+# In[27]:
 
 
-_, _, y_true, y_predicted = test_model(
-    fine_tuned_model, 
-    criterion_ft, 
-    test_loader,
-)
-confusion_matrix_ = confusion_matrix(y_true, y_predicted)
-print(confusion_matrix_)
+for model_name, model in best_models.items():
+    print(f'\nEvaluating model {model_name}:')
+    
+    _, _, y_true, y_predicted = test_model(
+        model, 
+        criterion_ft, 
+        test_loader,
+    )
+    confusion_matrix_ = confusion_matrix(y_true, y_predicted)
+    confusion_matrix_dataframe = pd.DataFrame(
+        confusion_matrix_, 
+        index=classes,
+        columns=classes,
+    )
 
-
-# In[18]:
-
-
-confusion_matrix_dataframe = pd.DataFrame(
-    confusion_matrix_, 
-    index=classes,
-    columns=classes,
-)
-
-heatmap = sns.heatmap(confusion_matrix_dataframe, annot=True)
-plt.ylabel('True label', fontsize=14, fontweight='bold')
-plt.xlabel('Predicted label', fontsize=14, fontweight='bold')
-plt.show()
+    heatmap = sns.heatmap(confusion_matrix_dataframe, annot=True)
+    plt.ylabel('True label', fontsize=14, fontweight='bold')
+    plt.xlabel('Predicted label', fontsize=14, fontweight='bold')
+    plt.title(f'Confusion matrix for {model_name}')
+    plt.show()
 
 
 # #### Mislabeled images
