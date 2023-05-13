@@ -3,7 +3,7 @@
 
 # # Multi-classification of chest X-ray images with a convolutional neural network
 
-# In[23]:
+# In[1]:
 
 
 import copy
@@ -29,7 +29,7 @@ from tqdm import tqdm
 get_ipython().run_line_magic('matplotlib', 'inline')
 
 
-# In[ ]:
+# In[2]:
 
 
 print(f'Python version: {sys.version_info.major}.{sys.version_info.minor}')
@@ -147,6 +147,8 @@ validation_dataset.dataset.transform = validation_transforms
 test_dataset = datasets.ImageFolder(root=TEST_FOLDER, transform=test_transforms)
 
 
+# ### Exploring the dataset
+
 # In[8]:
 
 
@@ -195,7 +197,11 @@ while class_id < len(classes):
                 class_id += 1
 
 
-# In[20]:
+# ## Training and evaluating the model
+
+# ### Defining the training and testing functions
+
+# In[10]:
 
 
 def train_model(
@@ -320,13 +326,17 @@ def plot_loss(list1, list2, label1, label2):
     plt.show()
 
 
+# ### Training hyperparameters
+
 # In[12]:
 
 
-NUM_EPOCHS = 15
+NUM_EPOCHS = 20
 LEARNING_RATE = 3e-5
 WEIGHT_DECAY = 1e-2
 
+
+# ### Model selection and training
 
 # In[13]:
 
@@ -358,6 +368,10 @@ torch.save(best_ft_model_state, 'best_model.pth')
 fine_tuned_model.load_state_dict(best_ft_model_state)
 
 
+# ### Visualization and evaluation
+
+# #### Loading best model
+
 # In[15]:
 
 
@@ -374,6 +388,8 @@ fine_tuned_model.load_state_dict(best_ft_model_state)
 criterion_ft = nn.CrossEntropyLoss()
 
 
+# #### Plotting losses
+
 # In[16]:
 
 
@@ -385,7 +401,9 @@ plot_loss(
 )
 
 
-# In[21]:
+# #### Evaluating the performance of the model
+
+# In[17]:
 
 
 _, _, y_true, y_predicted = test_model(
@@ -397,13 +415,14 @@ confusion_matrix_ = confusion_matrix(y_true, y_predicted)
 print(confusion_matrix_)
 
 
-# In[25]:
+# In[18]:
 
 
 confusion_matrix_dataframe = pd.DataFrame(
     confusion_matrix_, 
     index=classes,
-    columns=[i for i in classes])
+    columns=classes,
+)
 
 heatmap = sns.heatmap(confusion_matrix_dataframe, annot=True)
 plt.ylabel('True label', fontsize=14, fontweight='bold')
@@ -411,8 +430,28 @@ plt.xlabel('Predicted label', fontsize=14, fontweight='bold')
 plt.show()
 
 
-# In[ ]:
+# #### Mislabeled images
+
+# In[19]:
 
 
+test_loader = DataLoader(
+    test_dataset, batch_size=len(test_dataset), shuffle=True
+)
 
+
+# In[20]:
+
+
+for (images, labels) in test_loader:
+    for i, (predicted_label, true_label, image, label) in enumerate(
+        zip(y_predicted, y_true, images, labels)
+    ):
+        if predicted_label != true_label:
+            plt.figure(figsize=(8, 4))
+            plt.title(
+                f'#{i} Predicted Label: "{classes[predicted_label]}" '
+                f'True Label: "{classes[true_label]}" '
+            )
+            plt.imshow(image.permute(1, 2, 0))
 
