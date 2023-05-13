@@ -9,6 +9,7 @@
 import copy
 import os
 from PIL import Image
+import random
 import sys
 from typing import Tuple
 
@@ -128,7 +129,10 @@ ROTATION_DEGREE = 20
 # In[ ]:
 
 
-random.s
+RANDOM_SEED = 42
+
+random.seed(RANDOM_SEED)
+torch.random.manual_seed(RANDOM_SEED)
 
 
 # In[7]:
@@ -385,6 +389,7 @@ for model_name, model in models_to_fine_tune.items():
         NUM_EPOCHS,
     )
     torch.save(best_fine_tuned_model_state, f'best-model-{model_name}.pth')
+    
 
 
 # ### Visualization and evaluation
@@ -408,21 +413,6 @@ for model_name, model in models_to_fine_tune.items():
     best_model_state = torch.load(best_model_filename)
     model.load_state_dict(best_model_state)
     best_models[model_name] = model
-
-
-# #### Plotting losses
-
-# In[16]:
-
-
-# Do not run this cell
-
-plot_loss(
-    validation_ft_losses, 
-    training_ft_losses,
-    'validation',
-    'training',
-)
 
 
 # #### Evaluating the performance of the model
