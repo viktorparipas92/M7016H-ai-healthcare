@@ -325,9 +325,9 @@ def test_model(model, criterion, test_loader):
 # In[11]:
 
 
-def plot_loss(list1, list2, label1, label2):
+def plot_loss(list1, list2, label1, label2, model_name=''):
     plt.figure(figsize=(10, 5))
-    plt.title('Training and Validation Loss')
+    plt.title(f'Training and Validation Loss for {model_name}')
     plt.plot(list1, label=label1)
     plt.plot(list2, label=label2)
     plt.xlabel('Epoch')
@@ -348,27 +348,56 @@ WEIGHT_DECAY = 1e-2
 
 # ### Model selection and training
 
-# In[21]:
+# In[35]:
 
 
 resnet18_model = models.resnet18(weights='DEFAULT')
+resnet34_model = models.resnet34(weights='DEFAULT')
 resnet50_model = models.resnet50(weights='DEFAULT')
+alexnet = models.alexnet(weights='DEFAULT')
 
 models_to_fine_tune = {
     'ResNet-18': resnet18_model,
     'ResNet-50': resnet50_model,
+    'ResNet-34': resnet34_model,
+    # 'AlexNet': alexnet,
 }
 
 
-# In[24]:
+# In[36]:
+
+
+# Train all models
+# models_to_train = models_to_fine_tune
+
+# Train only newly added models
+from itertools import islice
+
+num_models_to_skip = 2
+models_to_train = dict(
+    islice(models_to_fine_tune.items(), num_models_to_skip, None)
+)
+
+
+# In[39]:
+
+
+list(models_to_train.keys())
+
+
+# In[40]:
 
 
 num_classes = len(classes)
 
-for model_name, model in models_to_fine_tune.items():
-    model.fc = nn.Linear(
-        model.fc.in_features, num_classes
-    )
+for model_name, model in models_to_train.items():
+    if model_name.startswith('ResNet'):
+        model.fc = nn.Linear(model.fc.in_features, num_classes)
+    elif model_name == 'AlexNet':
+        model.classifier[6] = nn.Linear(
+            model.classifier[6].in_features, num_classes
+        )
+    
     optimizer_for_fine_tuning = torch.optim.Adam(
         model.parameters(), 
         lr=LEARNING_RATE, 
@@ -390,34 +419,91 @@ for model_name, model in models_to_fine_tune.items():
     )
     torch.save(best_fine_tuned_model_state, f'best-model-{model_name}.pth')
     
+    plot_loss(
+        fine_tuned_validation_losses, 
+        fine_tuned_training_losses,
+        'validation',
+        'training',
+    )
+    
 
 
 # ### Visualization and evaluation
 
 # #### Loading best model
 
-# In[26]:
+# In[42]:
+
+
+list(models_to_fine_tune.keys())
+
+
+# In[45]:
 
 
 import torch
 
 
-# replace the last layer with one with 3 output features
-fine_tuned_model.fc = nn.Linear(fine_tuned_model.fc.in_features, 3)
-
 criterion_ft = nn.CrossEntropyLoss()
 
 best_models = {}
 for model_name, model in models_to_fine_tune.items():
-    best_model_filename = f'best-model-{model_name}.pth'
-    best_model_state = torch.load(best_model_filename)
-    model.load_state_dict(best_model_state)
+    try:
+        best_model_filename = f'best-model-{model_name}.pth'
+        best_model_state = torch.load(best_model_filename)
+        if model_name.startswith('ResNet'):
+            model.fc = nn.Linear(model.fc.in_features, num_classes)
+        elif model_name == 'AlexNet':
+            model.classifier[6] = nn.Linear(
+                model.classifier[6].in_features, num_classes
+            )
+        
+        model.load_state_dict(best_model_state)
+    except Exception as e:
+        print(f'Could not load model {model_name}: {e}')
+    
     best_models[model_name] = model
+
+list(best_models.keys())
 
 
 # #### Evaluating the performance of the model
 
-# In[27]:
+# In[49]:
+
+
+def plot_confusion_matrix_heatmap(
+    confusion_matrix: pd.DataFrame, model_name: str
+):
+    heatmap = sns.heatmap(confusion_matrix_dataframe, annot=True)
+    plt.ylabel('True label', fontsize=14, fontweight='bold')
+    plt.xlabel('Predicted label', fontsize=14, fontweight='bold')
+    plt.title(f'Confusion matrix for {model_name}')
+    plt.show()
+    
+def plot_mislabeled_images(
+    test_loader, y_predicted, y_true, classes=classes
+):
+    for (images, labels) in test_loader:
+        for i, (predicted_label, true_label, image, label) in enumerate(
+            zip(y_predicted, y_true, images, labels)
+        ):
+            if predicted_label != true_label:
+                plt.figure(figsize=(8, 4))
+                plt.title(
+                    f'#{i} Predicted Label: "{classes[predicted_label]}" '
+                    f'True Label: "{classes[true_label]}" '
+                )
+                plt.imshow(image.permute(1, 2, 0))
+                plt.show()
+
+
+# In[48]:
+
+
+test_loader = DataLoader(
+    test_dataset, batch_size=len(test_dataset), shuffle=True
+)
 
 
 for model_name, model in best_models.items():
@@ -435,35 +521,11 @@ for model_name, model in best_models.items():
         columns=classes,
     )
 
-    heatmap = sns.heatmap(confusion_matrix_dataframe, annot=True)
-    plt.ylabel('True label', fontsize=14, fontweight='bold')
-    plt.xlabel('Predicted label', fontsize=14, fontweight='bold')
-    plt.title(f'Confusion matrix for {model_name}')
-    plt.show()
-
-
-# #### Mislabeled images
-
-# In[19]:
-
-
-test_loader = DataLoader(
-    test_dataset, batch_size=len(test_dataset), shuffle=True
-)
-
-
-# In[20]:
-
-
-for (images, labels) in test_loader:
-    for i, (predicted_label, true_label, image, label) in enumerate(
-        zip(y_predicted, y_true, images, labels)
-    ):
-        if predicted_label != true_label:
-            plt.figure(figsize=(8, 4))
-            plt.title(
-                f'#{i} Predicted Label: "{classes[predicted_label]}" '
-                f'True Label: "{classes[true_label]}" '
-            )
-            plt.imshow(image.permute(1, 2, 0))
+    plot_confusion_matrix_heatmap(
+        confusion_matrix_dataframe, model_name
+    )
+    
+    plot_mislabeled_images(
+        test_loader, y_predicted, y_true, classes
+    )
 
